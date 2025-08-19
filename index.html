@@ -1,64 +1,76 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>UN International Days — Year Calendar & .ICS Export</title>
-<meta name="description" content="UN International Days calendar with monthly refresh, neon highlights, and ICS export.">
+<meta name="description" content="UN International Days calendar with monthly refresh, one-month-per-row layout, high-contrast styling, and ICS export.">
 <style>
   :root{
-    --bg:#0a1020; --panel:#111a2c; --panel2:#0f1830; --grid:#1a2744;
-    --text:#eaf1ff; --muted:#a9b8d6; --border:#24365c; --accent:#33d6a6; --glow:#75ffd9; --warn:#ffb020;
-    --chip:#1c2b4d; --chip-border:#2a3f6b;
+    /* higher contrast palette */
+    --bg:#0a1126; --panel:#101a34; --panel2:#0e1730;
+    --text:#f2f6ff; --muted:#c2cdea; --border:#2d4784; --grid:#1a2b57;
+    --accent:#44e0b4; --glow:#89ffe4; --warn:#ffd160;
+    --chip:#1e3164; --chip-border:#3a5aa0;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:radial-gradient(1200px 800px at 20% -10%,#0e1b3a 0,#0a1020 40%,#070d1a 100%);color:var(--text);font:15px/1.55 ui-sans-serif,system-ui,Segoe UI,Roboto,Ubuntu}
-  header{position:sticky;top:0;z-index:50;background:rgba(10,16,32,.85);backdrop-filter:saturate(120%) blur(6px);border-bottom:1px solid var(--border)}
+  body{margin:0;background:radial-gradient(1200px 800px at 18% -10%,#142655 0,#0a1126 45%,#070e1e 100%);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,Segoe UI,Roboto,Ubuntu}
+  header{position:sticky;top:0;z-index:50;background:rgba(10,17,38,.88);backdrop-filter:saturate(120%) blur(6px);border-bottom:1px solid var(--border)}
   .wrap{max-width:1200px;margin:0 auto;padding:14px 16px}
-  h1{margin:0;font-size:19px;letter-spacing:.2px}
+  h1{margin:0;font-size:20px;letter-spacing:.2px}
   .controls{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;margin-top:10px}
   .controls>*{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:12px;padding:10px}
   input[type="search"],select{width:100%;outline:none}
   button{cursor:pointer}
   .btn{transition:transform .12s ease, box-shadow .12s ease}
-  .btn.primary{background:linear-gradient(180deg,var(--accent),#8be1ca);color:#041015;border:0;font-weight:700}
+  .btn.primary{background:linear-gradient(180deg,var(--accent),#a2f1dc);color:#061216;border:0;font-weight:700}
   .btn:hover{transform:translateY(-1px)}
   main .status{margin:14px 0 10px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
   a{color:var(--accent)}
-  /* Calendar grid */
-  .calendar{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-  .month{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative;transition:transform .12s ease, box-shadow .15s ease, border-color .12s ease}
-  .month h2{margin:0;font-size:14px;padding:10px 12px;background:var(--panel2);border-bottom:1px solid var(--border);letter-spacing:.35px}
-  .month:focus-within, .month:hover{transform:translateY(-1px);box-shadow:0 0 0 2px rgba(51,214,166,.25), 0 0 22px rgba(117,255,217,.16)}
-  /* 7 columns, fixed 6 week rows for uniform height */
+
+  /* ===== One month per row ===== */
+  .calendar{display:grid;grid-template-columns:1fr;gap:18px}
+  .month{background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden;position:relative;transition:transform .12s ease, box-shadow .15s ease, border-color .12s ease}
+  .month h2{margin:0;font-size:16px;padding:12px 14px;background:var(--panel2);border-bottom:1px solid var(--border);letter-spacing:.35px}
+  .month:focus-within,.month:hover{transform:translateY(-1px);box-shadow:0 0 0 2px rgba(137,255,228,.28),0 0 26px rgba(137,255,228,.14)}
+
+  /* 7 columns header + 7 columns × 6 rows body => uniform grid */
   .wk{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;background:var(--grid)}
-  .dow{background:var(--panel2);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.8px;padding:8px 6px;border-right:1px solid var(--border)}
+  .dow{background:var(--panel2);color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.8px;padding:10px 8px;border-right:1px solid var(--border)}
   .dow:last-child{border-right:0}
-  .d{background:var(--panel);border-right:1px solid var(--border);border-top:1px solid var(--border);padding:8px 6px;position:relative;display:flex;flex-direction:column;gap:6px;min-height:86px;outline:none;transition:transform .08s ease, box-shadow .12s ease, border-color .12s ease}
+
+  /* day cells: full-width buttons, clear numbers, bigger min-height */
+  .d{background:var(--panel);border-right:1px solid var(--border);border-top:1px solid var(--border);
+     padding:10px 8px;position:relative;display:flex;flex-direction:column;gap:8px;min-height:120px;
+     outline:none;transition:transform .08s ease, box-shadow .12s ease, border-color .12s ease}
   .d:nth-child(7n){border-right:0}
-  .d .num{font-weight:700;opacity:.95}
-  .d .events{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
-  .chip, .more{font-size:11px;background:var(--chip);border:1px solid var(--chip-border);border-radius:999px;padding:3px 7px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
-  /* Neon bump */
-  .d:focus-visible, .d:hover{transform:translateY(-1px);box-shadow:0 0 0 2px rgba(117,255,217,.35), 0 0 26px rgba(117,255,217,.18) inset}
-  .d.today{box-shadow:0 0 0 2px rgba(253,224,71,.3), 0 0 24px rgba(253,224,71,.2) inset}
+  .d .num{font-weight:800;font-size:18px;letter-spacing:.2px}
+  .d .events{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+  .chip,.more{font-size:12px;background:var(--chip);border:1px solid var(--chip-border);border-radius:999px;padding:4px 8px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+  .chip{color:#e9f1ff}
+  .more{background:#253a74;border-color:#4d6cc0}
+  .d:focus-visible,.d:hover{transform:translateY(-1px);box-shadow:0 0 0 2px rgba(137,255,228,.35),0 0 26px rgba(137,255,228,.18) inset}
+  .d.today{box-shadow:0 0 0 2px rgba(255,209,96,.45),0 0 24px rgba(255,209,96,.25) inset}
   .d.inactive{opacity:.45}
-  .legend{margin:10px 0 0;color:var(--muted);font-size:12px}
-  .foot{margin:18px 0 40px;color:var(--muted)}
+
+  .legend{margin:8px 0 0;color:var(--muted);font-size:13px}
+  .foot{margin:16px 0 36px;color:var(--muted)}
+
   /* Modal */
   .modal{position:fixed;inset:0;background:rgba(5,10,18,.65);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:16px}
-  .card{max-width:760px;width:min(760px,96vw);background:var(--panel);border:1px solid var(--border);border-radius:14px}
-  .card header{position:unset;background:transparent;border:0}
+  .card{max-width:780px;width:min(780px,96vw);background:var(--panel);border:1px solid var(--border);border-radius:16px}
   .card .wrap{padding:16px}
-  .evlist{display:grid;gap:10px;margin:10px 0 4px}
+  .evlist{display:grid;gap:10px;margin:12px 0 4px}
   .ev{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--panel2)}
   .ev h3{margin:0 0 4px;font-size:16px}
-  .ev .meta{color:var(--muted);font-size:12px}
-  @media (max-width:980px){ .calendar{grid-template-columns:repeat(2,1fr)} }
-  @media (max-width:680px){ .controls{grid-template-columns:1fr} .calendar{grid-template-columns:1fr} .d{min-height:72px} }
-  @media (prefers-reduced-motion: reduce){
-    .month, .d, .btn{transition:none}
+  .ev .meta{color:var(--muted);font-size:13px}
+
+  @media (max-width:820px){
+    .controls{grid-template-columns:1fr 1fr 1fr; grid-auto-rows:auto}
+    .controls :nth-child(1){grid-column:1/-1}
+    .d{min-height:96px}
   }
+  @media (prefers-reduced-motion:reduce){ .month,.d,.btn{transition:none} }
 </style>
 </head>
 <body>
@@ -80,8 +92,7 @@
   </div>
 
   <section id="calendar" class="calendar" aria-live="polite"></section>
-  <div class="legend">Tip: hover or tab to a day to see the neon outline; click any day (or press Enter) to open details. Search filters the year.</div>
-  <p class="foot">Uniform months (6-week grids) keep the layout steady. Cells show up to three observances; “+N more” opens the details.</p>
+  <div class="legend">Now one month per row; 7 columns are always visible; day numbers bigger; click any day to expand. Search filters the whole year.</div>
 </main>
 
 <!-- Detail modal -->
@@ -89,7 +100,7 @@
   <div class="card">
     <div class="wrap">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-        <h2 id="modal-date" style="margin:0;font-size:17px">Details</h2>
+        <h2 id="modal-date" style="margin:0;font-size:18px">Details</h2>
         <button id="close" class="btn">Close</button>
       </div>
       <div id="modal-body" class="evlist"></div>
@@ -98,7 +109,7 @@
 </div>
 
 <script>
-/* ===== Config & cache ===== */
+/* ===== unchanged data plumbing (refresh cache + ICS) with minor UI tweaks ===== */
 const CACHE_KEY='un_days_cache_v1', CACHE_AT='un_days_cache_time_v1', CACHE_SRC='un_days_cache_source_v1';
 const MAX_CACHE_AGE_DAYS=30;
 const SOURCE_PRIMARY={name:'GitHub ICS (community)',type:'ics',url:'https://raw.githubusercontent.com/civilianEU/un-international-days/master/un-international-days.ics'};
@@ -106,18 +117,18 @@ const SOURCES=[SOURCE_PRIMARY];
 
 const state={allEvents:[],byDate:new Map(),year:new Date().getFullYear(),query:''};
 
-/* ===== Utils ===== */
+/* Utils */
 const pad=n=>(n<10?'0':'')+n;
 const ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const parseICSDate=s=>{const m=/^(\d{4})(\d{2})(\d{2})/.exec(s);return m?new Date(+m[1],+m[2]-1,+m[3]):null;}
 function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
-function unfoldICS(text){return text.replace(/\r\n|\r/g,'\n').split('\n').reduce((a,l)=>{if(l.startsWith(' ')||l.startsWith('\t'))a[a.length-1]+=l.slice(1);else a.push(l);return a;},[]).join('\n')}
+function unfoldICS(t){return t.replace(/\r\n|\r/g,'\n').split('\n').reduce((a,l)=>{if(l.startsWith(' ')||l.startsWith('\t'))a[a.length-1]+=l.slice(1);else a.push(l);return a;},[]).join('\n')}
 function parseRRule(s){return s.split(';').reduce((o,p)=>{const i=p.indexOf('=');if(i>0)o[p.slice(0,i)]=p.slice(i+1);return o;},{})}
-function nthWeekdayOfMonth(y,m,w,n){const f=new Date(y,m,1);const d=f.getDay();const delta=((w-d)+7)%7;const date=1+delta+(n-1)*7;const r=new Date(y,m,date);return r.getMonth()===m?r:null}
-function lastWeekdayOfMonth(y,m,w){const last=new Date(y,m+1,0);const d=last.getDay();const delta=((d-w)+7)%7;return new Date(y,m+1,0-delta)}
+function nthWeekdayOfMonth(y,m,w,n){const f=new Date(y,m,1),d=f.getDay(),delta=((w-d)+7)%7,date=1+delta+(n-1)*7,r=new Date(y,m,date);return r.getMonth()===m?r:null}
+function lastWeekdayOfMonth(y,m,w){const last=new Date(y,m+1,0),d=last.getDay(),delta=((d-w)+7)%7;return new Date(y,m+1,0-delta)}
 function byDayTokenToIndex(t){return ['SU','MO','TU','WE','TH','FR','SA'].indexOf(t)}
 
-/* ===== Parse + expand ===== */
+/* Expand vevent to a concrete date in the selected year */
 function expandToYear(v,year){
   const out=[]; const r=v.rrule?parseRRule(v.rrule):null;
   const s0=v.dtstart?parseICSDate(v.dtstart):null, e0=v.dtend?parseICSDate(v.dtend):null;
@@ -137,6 +148,8 @@ function expandToYear(v,year){
   if(s0){const s=new Date(year,s0.getMonth(),s0.getDate());for(let i=0;i<span;i++) out.push({start:addDays(s,i),end:addDays(s,i+1)});}
   return out;
 }
+
+/* Parse ICS */
 function parseICS(text,srcName){
   const clean=unfoldICS(text);
   const blocks=clean.split('BEGIN:VEVENT').slice(1).map(b=>b.split('END:VEVENT')[0]);
@@ -149,7 +162,7 @@ function parseICS(text,srcName){
   return events;
 }
 
-/* ===== Fetch + cache ===== */
+/* Fetch + cache */
 async function fetchEvents(){
   for(const s of SOURCES){
     try{
@@ -172,7 +185,7 @@ function loadCache(){
   }catch{ return null; }
 }
 
-/* ===== Build index ===== */
+/* Index */
 function buildIndex(list,year){
   const byDate=new Map(); const flat=[];
   for(const v of list){
@@ -187,18 +200,16 @@ function buildIndex(list,year){
   return {byDate,materialized:flat};
 }
 
-/* ===== Render ===== */
+/* Render */
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MAX_CHIPS=3;
 
 function renderYearOptions(){
   const sel=document.getElementById('year'); sel.innerHTML='';
   const nowY=new Date().getFullYear();
-  for(let y=nowY-1;y<=nowY+4;y++){const o=document.createElement('option'); o.value=y; o.textContent=y; if(y===state.year)o.selected=true; sel.appendChild(o);}
+  for(let y=nowY-1;y<=nowY+4;y++){const o=document.createElement('option');o.value=y;o.textContent=y;if(y===state.year)o.selected=true;sel.appendChild(o);}
 }
-
-/* capped chips per cell for uniform heights */
-const MAX_CHIPS=3;
 
 function renderCalendar(){
   const wrap=document.getElementById('calendar'); wrap.innerHTML='';
@@ -209,56 +220,59 @@ function renderCalendar(){
     box.innerHTML=`<h2>${MONTHS[m]}</h2>`;
     const grid=document.createElement('div'); grid.className='wk';
 
-    // 7 DOW headers
+    // DOW row (7 columns)
     for(const wd of DOW){ const el=document.createElement('div'); el.className='dow'; el.textContent=wd; grid.appendChild(el); }
 
-    const first=new Date(state.year,m,1); const padStart=(first.getDay()+7)%7; const daysInMonth=new Date(state.year,m+1,0).getDate();
-    // leading empties to align first week
-    for(let i=0;i<padStart;i++){const e=document.createElement('div'); e.className='d inactive'; e.setAttribute('aria-hidden','true'); grid.appendChild(e);}
+    const first=new Date(state.year,m,1);
+    const padStart=(first.getDay()+7)%7;
+    const daysInMonth=new Date(state.year,m+1,0).getDate();
 
-    // days (we’ll still render up to 6 weeks total by adding trailing empties below)
+    // leading blanks to align first week
+    for(let i=0;i<padStart;i++){ const e=document.createElement('div'); e.className='d inactive'; e.setAttribute('aria-hidden','true'); grid.appendChild(e); }
+
+    // day cells
     for(let d=1; d<=daysInMonth; d++){
-      const cell=document.createElement('button'); cell.type='button'; cell.className='d'; cell.setAttribute('aria-label',`Open ${MONTHS[m]} ${d}`);
+      const cell=document.createElement('button'); cell.type='button'; cell.className='d';
       const cur=new Date(state.year,m,d); const key=ymd(cur); if(key===todayKey) cell.classList.add('today');
       const evs=state.byDate.get(key)||[];
-      const all= q ? evs.filter(e=>e.title.toLowerCase().includes(q)) : evs;
+      const visible=q ? evs.filter(e=>e.title.toLowerCase().includes(q)) : evs;
 
       const holder=document.createElement('div'); holder.className='events';
-      const shown=all.slice(0,MAX_CHIPS);
+      const shown=visible.slice(0,MAX_CHIPS);
       shown.forEach(e=>{ const chip=document.createElement('span'); chip.className='chip'; chip.title=e.title; chip.textContent=e.title; holder.appendChild(chip); });
-      if(all.length>MAX_CHIPS){ const more=document.createElement('span'); more.className='more'; more.textContent=`+${all.length-MAX_CHIPS} more`; holder.appendChild(more); }
-      if(evs.length && !all.length) cell.classList.add('inactive');
+      if(visible.length>MAX_CHIPS){ const more=document.createElement('span'); more.className='more'; more.textContent=`+${visible.length-MAX_CHIPS} more`; holder.appendChild(more); }
+      if(evs.length && !visible.length) cell.classList.add('inactive');
 
-      cell.addEventListener('click',()=>{ if(all.length) showModal(key,all); });
-      cell.addEventListener('keydown',e=>{ if(e.key==='Enter'&&all.length) showModal(key,all); });
+      cell.addEventListener('click',()=>{ if(visible.length) showModal(key,visible); });
+      cell.addEventListener('keydown',e=>{ if(e.key==='Enter'&&visible.length) showModal(key,visible); });
 
       cell.innerHTML=`<div class="num">${d}</div>`; cell.appendChild(holder); grid.appendChild(cell);
     }
 
-    // trailing empties to complete a 6-week grid (42 cells + 7 dow)
-    const cellsSoFar=padStart+daysInMonth; const totalCells=42;
-    for(let i=cellsSoFar;i<totalCells;i++){const e=document.createElement('div'); e.className='d inactive'; e.setAttribute('aria-hidden','true'); grid.appendChild(e);}
+    /* trailing blanks so every month renders exactly 6 weeks (42 cells) below the DOW header */
+    const cellsSoFar=padStart+daysInMonth;
+    for(let i=cellsSoFar;i<42;i++){ const e=document.createElement('div'); e.className='d inactive'; e.setAttribute('aria-hidden','true'); grid.appendChild(e); }
 
     box.appendChild(grid); wrap.appendChild(box);
   }
 }
 
-/* ===== Modal ===== */
+/* Modal */
 function showModal(key,list){
   const d=new Date(key);
   document.getElementById('modal-date').textContent=d.toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const body=document.getElementById('modal-body'); body.innerHTML='';
   for(const e of list){
-    const when=`${e.dateStart.toLocaleDateString()}${(+e.dateEnd-+e.dateStart>86400000?' – '+addDays(e.dateEnd,-1).toLocaleDateString():'')}`;
+    const range=(+e.dateEnd-+e.dateStart>86400000)?' – '+addDays(e.dateEnd,-1).toLocaleDateString():'';
     const div=document.createElement('div'); div.className='ev';
-    div.innerHTML=`<h3>${e.title}</h3><div class="meta">${when}</div>${e.url?`<div><a href="${e.url}" target="_blank" rel="noopener">More info</a></div>`:''}<div class="meta">Source: ${e.src}</div>`;
+    div.innerHTML=`<h3>${e.title}</h3><div class="meta">${e.dateStart.toLocaleDateString()}${range}</div>${e.url?`<div><a href="${e.url}" target="_blank" rel="noopener">More info</a></div>`:''}<div class="meta">Source: ${e.src}</div>`;
     body.appendChild(div);
   }
   const modal=document.getElementById('modal'); modal.style.display='flex'; modal.setAttribute('aria-hidden','false');
 }
 function hideModal(){const m=document.getElementById('modal'); m.style.display='none'; m.setAttribute('aria-hidden','true');}
 
-/* ===== Export ICS ===== */
+/* Export ICS */
 function foldICSLines(s){return s.split('\n').map(line=>{if(line.length<=74)return line;let out='',i=0;while(i<line.length){out+=line.slice(i,i+74)+(i+74<line.length?'\r\n ':'');i+=74}return out}).join('\n')}
 function toICS(){
   const year=state.year, items=[], seen=new Set();
@@ -277,7 +291,7 @@ function toICS(){
   const a=document.createElement('a'); a.href=url; a.download=`UN_International_Days_${year}.ics`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1200);
 }
 
-/* ===== Load flow ===== */
+/* Load */
 function setStatus(source,when){document.getElementById('source').textContent=source; document.getElementById('updated').textContent=when.toLocaleString();}
 function apply(list){const {byDate,materialized}=buildIndex(list,state.year); state.byDate=byDate; state.allEvents=materialized; renderCalendar();}
 async function ensureData({force=false}={}){
@@ -286,7 +300,7 @@ async function ensureData({force=false}={}){
   setStatus('Fetching…', new Date()); const {list,source}=await fetchEvents(); saveCache(list,source); setStatus(source,new Date()); apply(list);
 }
 
-/* ===== Wire UI ===== */
+/* Wire UI */
 document.getElementById('year').addEventListener('change',e=>{state.year=+e.target.value;const c=loadCache(); if(c) apply(c.list);});
 document.getElementById('q').addEventListener('input',e=>{state.query=e.target.value; renderCalendar();});
 document.getElementById('refresh').addEventListener('click',()=>ensureData({force:true}).catch(err=>alert(err.message)));
@@ -294,7 +308,7 @@ document.getElementById('export').addEventListener('click',toICS);
 document.getElementById('close').addEventListener('click',hideModal);
 document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal') hideModal();});
 
-/* ===== Init ===== */
+/* Init */
 (function init(){ renderYearOptions(); ensureData().catch(err=>{console.error(err); alert('Could not load observances.');}); })();
 </script>
 </body>
