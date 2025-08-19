@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UN International Days — Year Calendar & .ICS Export</title>
+<meta name="description" content="Single-file app that fetches UN International Days, shows them on a yearly calendar, refreshes monthly, and exports .ics.">
+<style>
+  :root{
+    --bg:#0b1220;--panel:#121a2b;--grid:#16223b;--text:#e6eefc;--muted:#9fb0cf;--accent:#33d6a6;--warn:#ffb020;
+    --chip:#1b2946;--accent2:#8be1ca;--border:#203055;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 ui-sans-serif,system-ui,Segoe UI,Roboto,Ubuntu;color:var(--text);background:linear-gradient(180deg,#081225,#0b1220)}
+  header{position:sticky;top:0;z-index:10;background:rgba(11,18,32,.85);backdrop-filter:saturate(130%) blur(6px);border-bottom:1px solid var(--border)}
+  .wrap{max-width:1200px;margin:0 auto;padding:14px 16px}
+  h1{margin:0;font-size:18px;letter-spacing:.2px}
+  .controls{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;margin-top:10px}
+  .controls > *{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px}
+  select, input[type="search"]{width:100%;outline:none}
+  button{cursor:pointer}
+  button.primary{background:linear-gradient(180deg,var(--accent),var(--accent2));color:#051016;border:0;font-weight:600}
+  main .status{margin:14px 0 6px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
+  .calendar{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .month{border:1px solid var(--border);background:var(--panel);border-radius:12px;overflow:hidden}
+  .month h2{margin:0;font-size:14px;padding:10px 12px;background:#0f1830;border-bottom:1px solid var(--border);letter-spacing:.4px}
+  .wk{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--grid)}
+  .wk div{background:var(--panel)}
+  .dow,.d{padding:8px 6px;min-height:38px}
+  .dow{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.8px}
+  .d{position:relative}
+  .d .num{font-weight:650;opacity:.9}
+  .d .events{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px}
+  .chip{font-size:11px;background:var(--chip);border:1px solid var(--border);border-radius:999px;padding:3px 7px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+  .d.today{outline:2px solid var(--accent)}
+  .d.inactive{opacity:.35}
+  .empty{height:0}
+  .legend{margin:10px 0 0;color:var(--muted);font-size:12px}
+  .foot{margin:18px 0 40px;color:var(--muted)}
+  .modal{position:fixed;inset:0;background:rgba(5,10,18,.65);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:16px}
+  .card{max-width:720px;width:min(720px,96vw);background:var(--panel);border:1px solid var(--border);border-radius:12px}
+  .card header{position:unset;background:transparent;border:0}
+  .card .wrap{padding:14px 16px}
+  .evlist{display:grid;gap:8px;margin:8px 0 4px}
+  .ev{border:1px solid var(--border);border-radius:10px;padding:10px;background:#0f1830}
+  .ev h3{margin:0 0 4px;font-size:15px}
+  .ev .meta{color:var(--muted);font-size:12px}
+  .src{font-size:12px;color:var(--muted)}
+  a{color:var(--accent)}
+  @media (max-width:980px){ .calendar{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:680px){ .controls{grid-template-columns:1fr;}; .calendar{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>UN International Days — Annual Calendar</h1>
+  <div class="controls">
+    <input id="q" type="search" placeholder="Search (e.g., ‘Oceans’, ‘Refugee’, ‘Language’)">
+    <select id="year"></select>
+    <button id="refresh">Refresh from web</button>
+    <button id="export" class="primary">Export .ics (year)</button>
+  </div>
+</div></header>
+
+<main class="wrap">
+  <div class="status">
+    <div>Data source: <span id="source">—</span></div>
+    <div>Last update: <span id="updated">—</span></div>
+    <div><a href="https://www.un.org/en/observances/list-days-weeks" target="_blank" rel="noopener">Verify on UN.org</a></div>
+  </div>
+
+  <section id="calendar" class="calendar" aria-live="polite"></section>
+  <div class="legend">Tip: click any date chip to see all observances that day. Search filters the whole year.</div>
+
+  <p class="foot src">This page fetches a maintained iCalendar feed of UN International Days and renders a local calendar. It checks for updates automatically if your cache is over 30 days old. Source fallback notes inside the code.</p>
+</main>
+
+<!-- Detail modal -->
+<div id="modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="card">
+    <div class="wrap">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <h2 id="modal-date" style="margin:0;font-size:16px">Details</h2>
+        <button id="close">Close</button>
+      </div>
+      <div id="modal-body" class="evlist"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* --- Config & State --- */
+const CACHE_KEY = 'un_days_cache_v1';
+const CACHE_AT  = 'un_days_cache_time_v1';
+const CACHE_SRC = 'un_days_cache_source_v1';
+const MAX_CACHE_AGE_DAYS = 30;
+
+/* Primary source: community ICS mirroring UN list (public raw on GitHub).
+   README: https://github.com/civilianEU/un-international-days  */
+const SOURCE_PRIMARY = {
+  name: 'GitHub ICS (community)',
+  type: 'ics',
+  url: 'https://raw.githubusercontent.com/civilianEU/un-international-days/master/un-international-days.ics'
+};
+
+/* Optional fallback: You can add more ICS URLs here later if you like.
+   Example placeholder left empty intentionally for reliability. */
+const SOURCES = [SOURCE_PRIMARY];
+
+const state = {
+  allEvents: [], // {title,dateStart,dateEnd,src,raw}
+  byDate: new Map(), // 'YYYY-MM-DD' -> [events]
+  year: new Date().getFullYear(),
+  query: ''
+};
+
+/* --- Utilities --- */
+const pad = n => (n<10?'0':'')+n;
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parseICSDate = s => {
+  // YYYYMMDD or YYYYMMDDTHHMMSSZ or local
+  const m = /^(\d{4})(\d{2})(\d{2})/.exec(s);
+  if(!m) return null;
+  return new Date(Number(m[1]), Number(m[2])-1, Number(m[3]));
+};
+function addDays(d, n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+
+/* ical folding removal per RFC5545: lines starting with space/tab are continuations */
+function unfoldICS(text){
+  return text.replace(/\r\n|\r/g,'\n').split('\n').reduce((arr,line)=>{
+    if(line.startsWith(' ')||line.startsWith('\t')) arr[arr.length-1]+=line.slice(1);
+    else arr.push(line);
+    return arr;
+  },[]).join('\n');
+}
+function parseRRule(s){
+  return s.split(';').reduce((o,p)=>{ const i=p.indexOf('='); if(i>0){o[p.slice(0,i)]=p.slice(i+1)} return o; },{});
+}
+function nthWeekdayOfMonth(year, monthIndex, weekday, n){ // monthIndex 0..11, weekday 0=Sun..6
+  const first = new Date(year, monthIndex, 1);
+  let day = first.getDay();
+  let delta = ((weekday - day) + 7) % 7;
+  let date = 1 + delta + (n-1)*7;
+  const res = new Date(year, monthIndex, date);
+  if(res.getMonth()!==monthIndex) return null;
+  return res;
+}
+function lastWeekdayOfMonth(year, monthIndex, weekday){
+  const last = new Date(year, monthIndex+1, 0); // last day of month
+  let day = last.getDay();
+  let delta = ((day - weekday) + 7) % 7;
+  return new Date(year, monthIndex+1, 0 - delta);
+}
+function byDayTokenToIndex(tok){ return ['SU','MO','TU','WE','TH','FR','SA'].indexOf(tok); }
+
+/* Expand an ICS VEVENT into one or more concrete dates for the selected year.
+   Handles: all-day DTSTART; YEARLY RRULE with BYMONTH/BYMONTHDAY; or BYMONTH+BYDAY(+BYSETPOS) */
+function expandToYear(v, year){
+  const out = [];
+  const r = v.rrule ? parseRRule(v.rrule) : null;
+
+  // Determine span (default 1 day)
+  const startSeed = v.dtstart ? parseICSDate(v.dtstart) : null;
+  const endSeed   = v.dtend ? parseICSDate(v.dtend) : null;
+  const spanDays  = (startSeed && endSeed) ? Math.max(1, Math.round((endSeed - startSeed)/86400000)) : 1;
+
+  // Case A: RRULE yearly with exact month/day
+  if(r && r.FREQ==='YEARLY'){
+    if(r.BYMONTH && r.BYMONTHDAY){
+      const m = Number(r.BYMONTH)-1, d = Number(r.BYMONTHDAY);
+      const s = new Date(year, m, d);
+      for(let i=0;i<spanDays;i++) out.push({start:addDays(s,i), end:addDays(s,i+1)});
+      return out;
+    }
+    // Case B: BYMONTH + BYDAY (+ optional BYSETPOS)
+    if(r.BYMONTH && r.BYDAY){
+      const m = Number(r.BYMONTH)-1;
+      const byday = r.BYDAY.split(',')[0]; // take first if multiple
+      const w = byDayTokenToIndex(byday.slice(-2));
+      const pos = r.BYSETPOS ? Number(r.BYSETPOS) : 1;
+      const s = (pos===-1) ? lastWeekdayOfMonth(year,m,w) : nthWeekdayOfMonth(year,m,w,pos);
+      if(s){
+        for(let i=0;i<spanDays;i++) out.push({start:addDays(s,i), end:addDays(s,i+1)});
+        return out;
+      }
+    }
+  }
+
+  // Fallback: use DTSTART month/day with target year
+  if(startSeed){
+    const s = new Date(year, startSeed.getMonth(), startSeed.getDate());
+    for(let i=0;i<spanDays;i++) out.push({start:addDays(s,i), end:addDays(s,i+1)});
+  }
+  return out;
+}
+
+/* Parse ICS text into events list */
+function parseICS(text, srcName){
+  const clean = unfoldICS(text);
+  const blocks = clean.split('BEGIN:VEVENT').slice(1).map(b=>b.split('END:VEVENT')[0]);
+  const events = [];
+  for(const b of blocks){
+    const prop = name => {
+      const m = b.match(new RegExp(`^${name}(?:;[^:]*)?:(.*)$`,`m`));
+      return m ? m[1].trim() : null;
+    };
+    const e = {
+      summary: prop('SUMMARY') || '(Untitled)',
+      dtstart: prop('DTSTART'),
+      dtend  : prop('DTEND'),
+      rrule  : prop('RRULE'),
+      url    : prop('URL'),
+      src    : srcName,
+      raw    : b
+    };
+    events.push(e);
+  }
+  return events;
+}
+
+/* Fetch with graceful fallback chain */
+async function fetchEvents(){
+  for(const s of SOURCES){
+    try{
+      const res = await fetch(s.url, {cache:'no-store'});
+      if(!res.ok) throw new Error(res.status+' '+res.statusText);
+      const text = await res.text();
+      const list = parseICS(text, s.name);
+      if(list.length) return {list, source:s.name};
+    }catch(err){
+      console.warn('Fetch failed for', s.name, err);
+    }
+  }
+  throw new Error('All sources failed. Please try again later.');
+}
+
+/* Cache helpers */
+function saveCache(list, source){
+  localStorage.setItem(CACHE_KEY, JSON.stringify(list));
+  localStorage.setItem(CACHE_AT, new Date().toISOString());
+  localStorage.setItem(CACHE_SRC, source);
+}
+function loadCache(){
+  try{
+    const raw = localStorage.getItem(CACHE_KEY);
+    if(!raw) return null;
+    const when = new Date(localStorage.getItem(CACHE_AT));
+    const source = localStorage.getItem(CACHE_SRC) || 'Unknown';
+    const ageDays = (Date.now()-when.getTime())/86400000;
+    return {list:JSON.parse(raw), when, ageDays, source};
+  }catch{ return null; }
+}
+
+/* Build occurrences for a given year, index by date */
+function buildIndex(list, year){
+  const byDate = new Map();
+  const materialized = [];
+  for(const v of list){
+    const occs = expandToYear(v, year);
+    for(const o of occs){
+      const key = ymd(o.start);
+      const item = {
+        title: v.summary.replace(/\s+/g,' ').trim(),
+        dateStart: o.start,
+        dateEnd: o.end,
+        src: v.src,
+        url: v.url || ''
+      };
+      if(!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key).push(item);
+      materialized.push(item);
+    }
+  }
+  // Sort events per day
+  for(const arr of byDate.values()){
+    arr.sort((a,b)=>a.title.localeCompare(b.title));
+  }
+  return {byDate, materialized};
+}
+
+/* Calendar rendering */
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function renderYearOptions(){
+  const sel = document.getElementById('year');
+  const nowY = new Date().getFullYear();
+  sel.innerHTML = '';
+  for(let y=nowY-1; y<=nowY+4; y++){
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if(y===state.year) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function renderCalendar(){
+  const wrap = document.getElementById('calendar');
+  wrap.innerHTML = '';
+  const q = state.query.trim().toLowerCase();
+  const todayKey = ymd(new Date());
+
+  for(let m=0;m<12;m++){
+    const box = document.createElement('div');
+    box.className = 'month';
+    box.innerHTML = `<h2>${MONTHS[m]}</h2>`;
+    const grid = document.createElement('div');
+    grid.className = 'wk';
+
+    // DOW header
+    for(const wd of DOW){ const el = document.createElement('div'); el.className='dow'; el.textContent = wd; grid.appendChild(el); }
+
+    const first = new Date(state.year, m, 1);
+    const padStart = (first.getDay()+7)%7;
+    const daysInMonth = new Date(state.year, m+1, 0).getDate();
+
+    // leading empties
+    for(let i=0;i<padStart;i++){ const e = document.createElement('div'); e.className='d inactive'; grid.appendChild(e); }
+
+    // days
+    for(let d=1; d<=daysInMonth; d++){
+      const cell = document.createElement('div'); cell.className='d';
+      const cur = new Date(state.year, m, d);
+      const key = ymd(cur);
+      if(key===todayKey) cell.classList.add('today');
+      cell.innerHTML = `<div class="num">${d}</div><div class="events"></div>`;
+      const holder = cell.querySelector('.events');
+      const evs = state.byDate.get(key) || [];
+
+      const filtered = q ? evs.filter(e=>e.title.toLowerCase().includes(q)) : evs;
+      for(const e of filtered){
+        const chip = document.createElement('button');
+        chip.type='button'; chip.className='chip'; chip.title=e.title; chip.textContent=e.title;
+        chip.addEventListener('click', ()=>showModal(key));
+        holder.appendChild(chip);
+      }
+      // Dim cell if all events filtered out
+      if(evs.length && !filtered.length) cell.classList.add('inactive');
+
+      grid.appendChild(cell);
+    }
+    box.appendChild(grid);
+    wrap.appendChild(box);
+  }
+}
+
+/* Modal */
+function showModal(key){
+  const list = state.byDate.get(key) || [];
+  const d = new Date(key);
+  document.getElementById('modal-date').textContent = d.toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const body = document.getElementById('modal-body');
+  body.innerHTML = '';
+  for(const e of list){
+    const div = document.createElement('div'); div.className='ev';
+    const when = `${e.dateStart.toLocaleDateString()}${(+e.dateEnd - +e.dateStart>86400000? ' – '+addDays(e.dateEnd,-1).toLocaleDateString() : '')}`;
+    div.innerHTML = `<h3>${e.title}</h3><div class="meta">${when}</div>${e.url?`<div><a href="${e.url}" target="_blank" rel="noopener">More info</a></div>`:''}<div class="src">Source: ${e.src}</div>`;
+    body.appendChild(div);
+  }
+  const modal = document.getElementById('modal');
+  modal.style.display='flex';
+  modal.setAttribute('aria-hidden','false');
+}
+function hideModal(){
+  const modal = document.getElementById('modal');
+  modal.style.display='none';
+  modal.setAttribute('aria-hidden','true');
+}
+
+/* Export .ics for current year */
+function foldICSLines(s){
+  // fold longer than 74 chars per line with CRLF and leading space
+  return s.split('\n').map(line=>{
+    if(line.length<=74) return line;
+    let out='',i=0;
+    while(i<line.length){ out+=line.slice(i,i+74)+(i+74<line.length?'\r\n ':''); i+=74; }
+    return out;
+  }).join('\n');
+}
+function toICS(){
+  const year = state.year;
+  const items = [];
+  // flatten & filter to this year
+  const seen = new Set();
+  for(const arr of state.byDate.values()){
+    for(const e of arr){
+      if(e.dateStart.getFullYear()!==year) continue;
+      const key = e.title+'#'+ymd(e.dateStart);
+      if(seen.has(key)) continue; seen.add(key);
+      const dt = e.dateStart, dtEnd = e.dateEnd; // DTEND is exclusive per RFC
+      const DTSTART = `${dt.getFullYear()}${pad(dt.getMonth()+1)}${pad(dt.getDate())}`;
+      const DTEND  = `${dtEnd.getFullYear()}${pad(dtEnd.getMonth()+1)}${pad(dtEnd.getDate())}`;
+      const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}@un-days`;
+      let vevent = [
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `SUMMARY:${e.title}`,
+        `DTSTART;VALUE=DATE:${DTSTART}`,
+        `DTEND;VALUE=DATE:${DTEND}`,
+        `DESCRIPTION:${e.title} — UN International Day`,
+        e.url?`URL:${e.url}`:'',
+        'END:VEVENT'
+      ].filter(Boolean).join('\n');
+      items.push(vevent);
+    }
+  }
+  const ical = [
+    'BEGIN:VCALENDAR',
+    'PRODID:-//UN International Days Calendar//EN',
+    'VERSION:2.0',
+    'CALSCALE:GREGORIAN',
+    `X-WR-CALNAME:UN International Days (${year})`,
+    ...items,
+    'END:VCALENDAR'
+  ].join('\n');
+
+  const blob = new Blob([foldICSLines(ical)], {type:'text/calendar;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `UN_International_Days_${year}.ics`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1500);
+}
+
+/* Load flow */
+async function ensureData({force=false}={}){
+  const cached = loadCache();
+  if(!force && cached && cached.list?.length && cached.ageDays <= MAX_CACHE_AGE_DAYS){
+    setStatus(cached.source, cached.when);
+    apply(cached.list);
+    return;
+  }
+  setStatus('Fetching…', new Date());
+  const {list, source} = await fetchEvents();
+  saveCache(list, source);
+  setStatus(source, new Date());
+  apply(list);
+}
+function setStatus(source, when){
+  document.getElementById('source').textContent = source;
+  document.getElementById('updated').textContent = when.toLocaleString();
+}
+function apply(list){
+  const {byDate, materialized} = buildIndex(list, state.year);
+  state.byDate = byDate;
+  state.allEvents = materialized;
+  renderCalendar();
+}
+
+/* Event wiring */
+document.getElementById('year').addEventListener('change', e=>{
+  state.year = Number(e.target.value);
+  const cached = loadCache();
+  if(cached){
+    apply(cached.list);
+  }
+});
+document.getElementById('q').addEventListener('input', e=>{
+  state.query = e.target.value;
+  renderCalendar();
+});
+document.getElementById('refresh').addEventListener('click', ()=>ensureData({force:true}).catch(err=>alert(err.message)));
+document.getElementById('export').addEventListener('click', ()=>toICS());
+document.getElementById('close').addEventListener('click', hideModal);
+document.getElementById('modal').addEventListener('click', (e)=>{ if(e.target.id==='modal') hideModal(); });
+
+/* Init */
+(function init(){
+  renderYearOptions();
+  ensureData().catch(err=>{
+    console.error(err);
+    alert('Could not load observances. Please try again later.');
+  });
+})();
+</script>
+</body>
+</html>
